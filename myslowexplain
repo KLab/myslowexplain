@@ -9,13 +9,13 @@ cnt = {}
 cnt['Total'] = 0
 
 try:
-    import MySQLdb  # MySQL-python
+  import MySQLdb  # MySQL-python
 except ImportError:
-    try:
-        import pymysql as MySQLdb  # PyMySQL
-    except ImportError:
-        print "Please install MySQLdb or PyMySQL"
-        sys.exit(1)
+  try:
+    import pymysql as MySQLdb  # PyMySQL
+  except ImportError:
+    print "Please install MySQLdb or PyMySQL"
+    sys.exit(1)
 
 def build_option_parser():
   parser = OptionParser(add_help_option=False, usage="usage: %prog [options] database")
@@ -30,9 +30,7 @@ def build_option_parser():
   parser.add_option('-?', '--help', action="store_true", help="show this message")
   return parser
 
-def printexplain(sql, exp):
-  print "==================================================="
-  print sql
+def printexplain(exp):
   print "---------------------------------------------------"
   print "%14s: %s" % ("id",            exp['id'])
   print "%14s: %s" % ("select_type",   exp['select_type'])
@@ -45,19 +43,53 @@ def printexplain(sql, exp):
   print "%14s: %s" % ("rows",          exp['rows'])
   print "%14s: %s" % ("ref",           exp['ref'])
 
-def fetchexplain(res, cur, type):
+def conv_selectsql(sql):
+  if re.search(r'^SELECT ', sql, re.IGNORECASE):
+    return sql
+
+  r = re.search(r'^UPDATE (\S+) SET .+ WHERE (.+)$', sql, re.IGNORECASE)
+  if r:
+    sql = "SELECT * FROM %s WHERE %s" % r.groups()
+    return sql
+
+  r = re.search(r'^DELETE FROM (\S+) WHERE (.+)$', sql, re.IGNORECASE)
+  if r:
+    sql = "SELECT * FROM %s WHERE %s" % r.groups()
+    return sql
+
+  return ""
+  
+def do_explain(cur, select_sql, type, sql):
   global cnt
+  v = False
+  explain_sql = "explain %s" % select_sql
+  cur.execute(explain_sql)
+  res = cur.fetchall()
+  for exp in res:
+    for t in type:
+      if exp['type'] == t or t == '%':
+        v = True
+        break
+  if v:
+    cnt[t] += 1
+    print "==================================================="
+    print sql
+    for exp in res: 
+      printexplain(exp)
+
+def fetchexplain(res, cur, type):
   row = res.fetch_row(1, 0)
   if not row:
     return False
-  sql = "explain %s" % row[0][0]
-  cur.execute(sql)
-  for exp in cur.fetchall():
-    for t in type:
-      if exp['type'] == t or t == '%':
-        cnt[t] += 1
-        printexplain(row[0][0], exp)
-        break
+  sql = row[0][0]
+  select_sql = conv_selectsql(sql)
+  if select_sql == "":
+    print "[conv error]: %s" % sql
+    return False
+
+  if select_sql != sql:
+    sql = "%s\n%s" % (sql, select_sql)
+  do_explain(cur, select_sql, type, sql)
   return True
 
 def main():
@@ -97,6 +129,7 @@ def main():
   sql_slow = {}
   sql_slow[0] = "SELECT DISTINCT(sql_text) FROM mysql.slow_log WHERE db='%s' and sql_text like 'SELECT %% WHERE %%' %s" % (args[0], span)
   sql_slow[1] = "SELECT DISTINCT(sql_text) FROM mysql.slow_log WHERE db='%s' and sql_text like 'UPDATE %% WHERE %%' %s" % (args[0], span)
+  sql_slow[2] = "SELECT DISTINCT(sql_text) FROM mysql.slow_log WHERE db='%s' and sql_text like 'DELETE %% WHERE %%' %s" % (args[0], span)
 
   con = {}
   con[0] = MySQLdb.connect(**cnf)
@@ -104,13 +137,15 @@ def main():
   con[1] = MySQLdb.connect(**cnf)
   cur = con[1].cursor(MySQLdb.cursors.DictCursor)
 
-  sql = sql_slow[0]
   print "==================================================="
-  print "START: %s" % sql
-  con[0].query(sql)
-  res = con[0].use_result()
-  while(fetchexplain(res, cur, type)):
-    cnt['Total'] += 1
+  for n in sql_slow:
+    print "START: %s" % sql_slow[n]
+  for n in sql_slow:
+    sql = sql_slow[n]
+    con[0].query(sql)
+    res = con[0].use_result()
+    while(fetchexplain(res, cur, type)):
+      cnt['Total'] += 1
   print "==================================================="
   for t in type:
     print "%5s: %d/%d rows" % (t, cnt[t], cnt['Total'])
