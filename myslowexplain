@@ -22,6 +22,7 @@ def build_option_parser():
   parser.add_option('-s', '--start',    help="Start Time(ex: '2012-07-28 03:00:00')")
   parser.add_option('-l', '--last',     help="Last Time [MINUTE]")
   parser.add_option('-t', '--type',     help="(default: ALL,index)", default='ALL,index')
+  parser.add_option('-e', '--extra',    help="Extra (ex: 'filesort,temporary' default: None)")
   parser.add_option('-h', '--host',     help="(default: 127.0.0.1)", default='127.0.0.1')
   parser.add_option('-P', '--port',     help="(default: 3306)",      default=3306)
   parser.add_option('-u', '--user',     help="(default: root)",      default='root')
@@ -58,26 +59,38 @@ def conv_selectsql(sql):
     return sql
 
   return ""
-  
-def do_explain(cur, select_sql, type, sql):
+
+def view_explain(p, sql, res):
   global cnt
+  if not cnt.has_key(p):
+    cnt[p] = 0
+  cnt[p] += 1
+  print "==================================================="
+  print sql
+  for exp in res: 
+    printexplain(exp)
+  
+def do_explain(cur, select_sql, type, ext, sql):
   v = False
+  p = ''
   explain_sql = "explain %s" % select_sql
   cur.execute(explain_sql)
   res = cur.fetchall()
   for exp in res:
+    p = exp['type']
     for t in type:
-      if exp['type'] == t or t == '%':
+      if p == t or t == '%':
         v = True
         break
-  if v:
-    cnt[t] += 1
-    print "==================================================="
-    print sql
-    for exp in res: 
-      printexplain(exp)
+    for e in ext:
+      if exp['Extra'].find("Using %s" % e) != -1:
+        v = True
+        break
+    if v:
+      view_explain(p, sql, res)
+      break
 
-def fetchexplain(res, cur, type):
+def fetchexplain(res, cur, type, ext):
   row = res.fetch_row(1, 0)
   if not row:
     return False
@@ -89,7 +102,7 @@ def fetchexplain(res, cur, type):
 
   if select_sql != sql:
     sql = "%s\n%s" % (sql, select_sql)
-  do_explain(cur, select_sql, type, sql)
+  do_explain(cur, select_sql, type, ext, sql)
   return True
 
 def main():
@@ -105,9 +118,12 @@ def main():
     parser.print_help()
     return
 
+  ext = {}
   cnf = {}
   cnf['host'] = opts.host
   cnf['user'] = opts.user
+  if opts.extra:
+    ext = opts.extra.split(",")
   if opts.password:
     cnf['passwd'] = opts.password
   if opts.socket:
@@ -144,11 +160,12 @@ def main():
     sql = sql_slow[n]
     con[0].query(sql)
     res = con[0].use_result()
-    while(fetchexplain(res, cur, type)):
+    while(fetchexplain(res, cur, type, ext)):
       cnt['Total'] += 1
   print "==================================================="
-  for t in type:
-    print "%5s: %d/%d rows" % (t, cnt[t], cnt['Total'])
+  for t in cnt:
+    if t != 'Total':
+      print "%5s: %d/%d rows" % (t, cnt[t], cnt['Total'])
 
 if __name__ == '__main__':
     main()
