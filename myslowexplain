@@ -19,7 +19,7 @@ except ImportError:
 
 def build_option_parser():
   parser = OptionParser(add_help_option=False, usage="usage: %prog [options] database")
-  parser.add_option('-s', '--start',    help="Start Time (ex: '2012-07-28 03:00:00'")
+  parser.add_option('-s', '--start',    help="Start Time(ex: '2012-07-28 03:00:00')")
   parser.add_option('-l', '--last',     help="Last Time [MINUTE]")
   parser.add_option('-t', '--type',     help="(default: ALL,index)", default='ALL,index')
   parser.add_option('-h', '--host',     help="(default: 127.0.0.1)", default='127.0.0.1')
@@ -109,7 +109,7 @@ def main():
   cnf['host'] = opts.host
   cnf['user'] = opts.user
   if opts.password:
-    cnf['password'] = opts.password
+    cnf['passwd'] = opts.password
   if opts.socket:
     cnf['host'] = 'localhost'
     cnf['unix_socket'] = opts.socket
