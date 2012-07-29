@@ -3,8 +3,13 @@
 import os
 import sys
 import re
+import signal
 from optparse import OptionParser
 
+signal.signal(signal.SIGINT,  signal.SIG_DFL)
+signal.signal(signal.SIGTERM, signal.SIG_DFL)
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+ 
 cnt = {}
 cnt['Total'] = 0
 
@@ -19,18 +24,18 @@ except ImportError:
 
 def build_option_parser():
   parser = OptionParser(add_help_option=False, usage="usage: %prog [options] database")
-  parser.add_option('-m', '--mode',     help="select|update|delete (default: select)", dest='sqlmode', default='select')
-  parser.add_option('-s', '--start',    help="Start Time(ex: '2012-07-28 03:00:00')", dest='time')
-  parser.add_option('-l', '--last',     help="Last Time [MINUTE] (default: 10)", default='10')
-  parser.add_option('-t', '--type',     help="Type  (ex: ALL,index default: none)")
-  parser.add_option('-e', '--extra',    help="Extra (ex: 'filesort,temporary' default: None)")
-  parser.add_option('-h', '--host',     help="(default: 127.0.0.1)", default='127.0.0.1')
-  parser.add_option('-P', '--port',     help="(default: 3306)",      default=3306)
-  parser.add_option('-u', '--user',     help="(default: root)",      default='root')
-  parser.add_option('-p', '--password')
-  parser.add_option('-S', '--socket')
-  parser.add_option('-?', '--help', action="store_true", help="show this message")
-  parser.add_option('--no-where',   action='store_false', dest='where', default=True, help='Do not use a WHERE clause to select statement')
+  parser.add_option('-m',         dest='sqlmode', default='select',                    help="select|update|delete (default: select)")
+  parser.add_option('-s',         dest='time',                                         help="Start Time(ex: '2012-07-28 03:00:00')")
+  parser.add_option('-l',         dest='last',    default='10',                        help="Last Time [MINUTE] (default: 10)")
+  parser.add_option('-t',         dest='type',                                         help="Type  (ex: ALL,index default: none)")
+  parser.add_option('-e',         dest='extra',                                        help="Extra (ex: 'filesort,temporary' default: None)")
+  parser.add_option('-h',         dest='host',    default='127.0.0.1',                 help="(default: 127.0.0.1)", )
+  parser.add_option('-P',         dest='port',    default=3306,                        help="(default: 3306)",      )
+  parser.add_option('-u',         dest='user',    default='root',                      help="(default: root)",      )
+  parser.add_option('-p',         dest='password',                                     help='password')
+  parser.add_option('-S',         dest='socket',                                       help='unix domain socket')
+  parser.add_option('--no-where', dest='where',   default=True,  action='store_false', help='Do not use a WHERE')
+  parser.add_option('--help',     dest='help',                   action="store_true",  help='show this message')
   return parser
 
 def printexplain(exp):
