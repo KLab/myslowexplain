@@ -5,12 +5,13 @@ import sys
 import re
 import signal
 from optparse import OptionParser
+from collections import defaultdict
 
 signal.signal(signal.SIGINT,  signal.SIG_DFL)
 signal.signal(signal.SIGTERM, signal.SIG_DFL)
 signal.signal(signal.SIGPIPE, signal.SIG_DFL)
  
-cnt = {}
+cnt = defaultdict(int)
 cnt['Total'] = 0  # explainをかけたSELECT文の数
 cnt['Rows']  = 0  # slow_logから抽出したレコードの数
 
@@ -105,8 +106,6 @@ def do_explain(cur, select_sql, typ, ext, row):
 
   # サブクエリを使っている場合は複数の結果が返ってくる
   for exp in res:
-    if not cnt.has_key(exp['type']):
-      cnt[exp['type']] = 0
     cnt[exp['type']] += 1
     cnt['Total'] += 1
     if exp['possible_keys'] is None:
