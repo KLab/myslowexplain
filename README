@@ -1,0 +1,60 @@
+MySQLのチューニングに欠かすことができない slow_log と explain ですが、
+膨大な slow_log の中から怪しそうなクエリを探しだして explainをかける
+というのは結構手間がかかりめんどくさいものです。
+
+myslowexplainは、slow_logに記録されたクエリに対してexplainを実行し、
+結果を表示するpythonスクリプトです。
+
+結果はこんな感じで表示されます。
+
+===================================================
+  last: 2012-07-30 18:03:23  # 最後に発行された時刻
+ qtime: 0:00:00              # 実行にかかった最大時間
+ count: 3                    # slow_logに出現した回数
+ query: SELECT COUNT(*) FROM `guild_message_board` WHERE guild_message_board.LAST_GOOD_AT IS NOT NULL  AND guild_message_board.PERSON_ID=1
+---------------------------------------------------
+           id: 1
+  select_type: SIMPLE
+         type: ALL
+        Extra: Using where
+        table: guild_message_board
+possible_keys: None
+          key: None
+      key_len: None
+         rows: 1966
+          ref: None
+===================================================
+
+発生頻度の多いクエリを優先して表示するので、問題解析に便利です。
+
+
+[使い方]
+$ myslowexplain -hサーバ名 -uユーザ名 -pパスワード DB名
+
+実行すると、過去10分間にslow_logに出力されたクエリを最大1000件
+取得してexplainをかけます。
+
+DBへの負荷を考慮して、デフォルトの挙動を「過去10分間で最大1000件抽出する」
+としています。対象時刻や件数を指定するには以下のオプションをつかいます。
+
+[slow_log抽出オプション]
+-L 数値                   最大何件取得するかを指定します(デフォルト1000, 0は無制限)
+-l 数値                   過去何分間のログを抽出するかを指定します(デフォルト 10)
+-s "yy-mm-dd HH:MM:SS"   指定した時刻以降のログを抽出します
+--no-where               WHERE節がついていないクエリも抽出します
+-m select|update|delete  デフォルトはselectです、updateとするとUPDATE文を抽出します
+                        WHERE節がついているUPDATEやDELETEの場合は、SELECT文に変換
+                        してexplainをかけます
+
+
+myslowexplainは explainの結果、possible_keys: None なものだけを表示します。
+他の結果も表示したい場合は以下のオプションを使います。
+
+[表示オプション]
+--all      全件表示します
+-t 文字列   指定したtypeを表示します 
+          "ALL,index" な感じで複数指定できます
+-e 文字列   文字列がExtraフィールドにでてきたら表示します 
+          "filesort,temporary" な感じで複数指定できます
+
+
