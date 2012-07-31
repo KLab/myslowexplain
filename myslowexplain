@@ -51,7 +51,7 @@ def printsql(row):
   print "  qtime: %s" % row['qtm']            # 最大のクエリ実行時間
   print "  count: %s" % row['cnt']            # クエリの数
   print "  query: %s" % row['sql_text']       # 問題のSQL文
-  if row.has_key('select'):                   #
+  if 'select' in row:
     print "explain: %s" % row['select']       # UPDATE/DELETEの場合はSELECTに変換したSQLを作る
 
 #
