@@ -5,20 +5,27 @@ import sys
 import re
 import signal
 from optparse import OptionParser
+from collections import defaultdict
 
 signal.signal(signal.SIGINT,  signal.SIG_DFL)
 signal.signal(signal.SIGTERM, signal.SIG_DFL)
 signal.signal(signal.SIGPIPE, signal.SIG_DFL)
  
-cnt = {}
+cnt = defaultdict(int)
 cnt['Total'] = 0  # explainをかけたSELECT文の数
 cnt['Rows']  = 0  # slow_logから抽出したレコードの数
 
 try:
   import MySQLdb  # MySQL-python
+  # SSDictCursor は use_result を使ってメモリ効率良く結果をフェッチする
+  # (SS は Server Side)
+  from MySQLdb.cursors import DictCursor, SSDictCursor
 except ImportError:
   try:
     import pymysql as MySQLdb  # PyMySQL
+    from pymysql.cursors import DictCursor
+    # PyMySQL は SSDictCursor を提供しないので DictCursor を使う.
+    SSDictCursor = DictCursor
   except ImportError:
     print "Please install MySQLdb or PyMySQL"
     sys.exit(1)
@@ -50,7 +57,7 @@ def printsql(row):
   print "  qtime: %s" % row['qtm']            # 最大のクエリ実行時間
   print "  count: %s" % row['cnt']            # クエリの数
   print "  query: %s" % row['sql_text']       # 問題のSQL文
-  if row.has_key('select'):                   #
+  if 'select' in row:
     print "explain: %s" % row['select']       # UPDATE/DELETEの場合はSELECTに変換したSQLを作る
 
 #
@@ -105,8 +112,6 @@ def do_explain(cur, select_sql, typ, ext, row):
 
   # サブクエリを使っている場合は複数の結果が返ってくる
   for exp in res:
-    if not cnt.has_key(exp['type']):
-      cnt[exp['type']] = 0
     cnt[exp['type']] += 1
     cnt['Total'] += 1
     if exp['possible_keys'] is None:
@@ -127,23 +132,14 @@ def do_explain(cur, select_sql, typ, ext, row):
 #
 # sloe_logをフェッチしてexplainに渡す
 #
-def fetchexplain(res, cur, typ, ext):
-  # 省メモリのため1行づつフェッチ
-  rows = res.fetch_row(1, 1)
-  if not rows:
-    return False
-
-  # 実際には1行しか返らないんだけども、
-  # タプルで返ってくるので全件処理するように書いておく
-  for row in rows:
-    select_sql = conv_selectsql(row['sql_text'])
-    if select_sql is None:
-      printsql(row)
-    else:
-      if select_sql != row['sql_text']:
-        row['select'] = select_sql
-      do_explain(cur, select_sql, typ, ext, row)
-  return True
+def fetchexplain(row, cur, typ, ext):
+  select_sql = conv_selectsql(row['sql_text'])
+  if select_sql is None:
+    printsql(row)
+  else:
+    if select_sql != row['sql_text']:
+      row['select'] = select_sql
+    do_explain(cur, select_sql, typ, ext, row)
 
 #
 # slow_log を抽出するSQL文を生成
@@ -207,16 +203,16 @@ def getconfig(opts):
 #
 def do_myslowexplain(db, sql, cnf, typ, ext):
   global cnt
-  con = {}
-  con[0] = MySQLdb.connect(**cnf)
+
+  slowlog_cur = MySQLdb.connect(**cnf).cursor(SSDictCursor)
   cnf['db'] = db
-  con[1] = MySQLdb.connect(**cnf)
-  cur = con[1].cursor(MySQLdb.cursors.DictCursor)
+  explain_cur = MySQLdb.connect(**cnf).cursor(DictCursor)
+
   print "==================================================="
   print sql
-  con[0].query(sql)
-  res = con[0].use_result()
-  while(fetchexplain(res, cur, typ, ext)):
+  slowlog_cur.execute(sql)
+  for row in slowlog_cur:
+    fetchexplain(row, explain_cur, typ, ext)
     cnt['Rows'] += 1
   print "==================================================="
   for t in cnt:
